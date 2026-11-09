@@ -640,7 +640,7 @@ import { personKey, relayedPersonKey } from "./person-key.ts";
 import { createOutsideLineage, OUTSIDE_STAYS_HERE } from "./host/outside-lineage.ts"; import { OUTSIDE_REFUSAL, outsideRouteRefused } from "./host/outside-fence.ts"; import { createOutsideWrites } from "./host/outside-writes.ts";
 import { teamAiOwner } from "./host/team-ai-owner.ts"; import { createTeamOwners, type AskViewer } from "./host/team-owners.ts"; import { createTeamMessages } from "./host/team-messages.ts"; import { createPlaceInbox, guestNameIn, placeInboxViewer } from "./host/place-inbox.ts"; import { relayedTurn } from "./host/relayed-turn.ts"; import { createPersonCalendar } from "./host/person-calendar.ts";
 import { createDevsReports } from "./host/devs-reports.ts"; import { bugReportEndpoint, devsReportSender, devsStatusAsker } from "./devs-report-send.ts"; import { captureRecentLog } from "./recent-log.ts"; import { createShareAnswer } from "./host/share-answer.ts";
-import { createCardRequester, linePersonKey } from "./host/thread-person.ts"; import { selfThreadRefusal } from "./host/self-threads.ts"; import { lookedAfterBy } from "./host/looked-after.ts"; import { createActingPeople, HANDED_PEOPLE_FILE, HandedPeople, type HandedRun, keptPrivate, privateHandBack, withPerson } from "./host/acting-person.ts"; import { createTurnCallSignals } from "./host/turn-call-signals.ts";
+import { createCardRequester, linePersonKey } from "./host/thread-person.ts"; import { createSteeredRequests } from "./host/steered-request.ts"; import { selfThreadRefusal } from "./host/self-threads.ts"; import { lookedAfterBy } from "./host/looked-after.ts"; import { createActingPeople, HANDED_PEOPLE_FILE, HandedPeople, type HandedRun, keptPrivate, privateHandBack, withPerson } from "./host/acting-person.ts"; import { createTurnCallSignals } from "./host/turn-call-signals.ts";
 import { createThreadRoutes } from "./routes/threads.ts";
 import { createWebhookRoutes } from "./routes/webhooks.ts";
 import { withScopeHint } from "./connector-scope-hint.ts";
@@ -872,7 +872,7 @@ function reactorFor(auth: RequestAuth): Reactor {
   return { by: actorKey(auth), ...(name ? { name } : {}) };
 }
 
-const cardRequesterKey = createCardRequester(() => store);
+const cardRequesterKey = createCardRequester(() => store); const steeredRequests = createSteeredRequests({ owner: (threadId) => directRequestOwners.get(threadId), line: (threadId, messageId) => store.messagesFor(threadId).find((message) => message.id === messageId), requote: (id, request) => coordinator.requote(id, request) });
 
 function threadPersonKey(threadId: string): string | undefined {
   const thread = store.messagesFor(threadId);
@@ -7281,7 +7281,7 @@ async function acceptDirectSend(
         let steered: SteerOutcome = "refused";
         const steerInput = extractTurnImages(text);
         const carriesImages = steerInput.images.length > 0;
-        const steerTarget = handoffs.current(threadId);
+        const steerTarget = handoffs.current(threadId), steerGeneration = steeredRequests.generation(threadId);
         const busyAdmission = admit("direct-busy", {
           carriesImages,
           engineCanSteerImages: engineSteersImages(instance),
@@ -7326,9 +7326,9 @@ async function acceptDirectSend(
             ...spokenLineFields(via, callId),
           });
           store.setTaskAskedAt(botId, threadId, message.at);
-          handoffs.steered(threadId, steerTarget, instance?.instanceId, message.id);
+          handoffs.steered(threadId, steerTarget, instance?.instanceId, message.id); steeredRequests.requote(threadId, steerGeneration, message, personsOwn);
           signInSettle.answerInChat(botId, threadId);
-          if (personsOwn) personFirst.wait(threadId, { requeue: (note) => void queueSteeredMessage(current.id, threadId, text, { prompt: note ? `${queuedPrompt}\n\n${note}` : queuedPrompt, rowId: message.id, first: true, queuedAt: message.at, replyToId: replyTo?.id, dataContext, sender, trigger, via, callId, mentions }) });
+          if (personsOwn) personFirst.wait(threadId, { requeue: (note) => void queueSteeredMessage(current.id, threadId, text, { prompt: note ? `${queuedPrompt}\n\n${note}` : queuedPrompt, rowId: message.id, first: true, queuedAt: message.at, replyToId: replyTo?.id, dataContext, sender, trigger, via, callId, mentions, personsOwn: true }) });
           return { ok: true as const, steered: true as const, threadId, message };
         }
         if (!current.busy) {
@@ -7337,7 +7337,7 @@ async function acceptDirectSend(
         const queued = queueSteeredMessage(current.id, threadId, text, {
           replyToId: replyTo?.id,
           sendId,
-          dataContext, fromApp: app?.fromApp, mentions,
+          dataContext, fromApp: app?.fromApp, mentions, personsOwn,
           prompt: queuedPrompt,
           sender,
           trigger,
@@ -12111,7 +12111,7 @@ ROUTES.push(createSharedComputerRoutes({ enabled: (auth) => lendingEnabled() || 
   cloudHomeLender: CLOUD_HOME ? CLOUD_HOME_LENDER : null, principal: sessionLendingPrincipal, personKey, power: () => cloudPower, links: CLOUD_HOME ? deviceLinks : null, upgrades, asks: computerAsks?.asks ?? null, answerer: cardAnswererFor }));
 // `routines` is assigned at boot, so it is read per request.
 ROUTES.push(createBotMessageRoutes({
-  store, registry, handoffs, liveTurn: (threadId) => liveTurns.running(threadId), phoneSecretSubmissions, directTurnDispatchClaims, groupSpeakers,
+  store, registry, handoffs, steeredRequests, liveTurn: (threadId) => liveTurns.running(threadId), phoneSecretSubmissions, directTurnDispatchClaims, groupSpeakers,
   routines: () => routines,
   fromPhone: phones.fromPhone, notePhoneSend: phones.noteSend,
   desktopManaged: DESKTOP_MANAGED, cloudHome: Boolean(CLOUD_HOME), DirectSendRefused,

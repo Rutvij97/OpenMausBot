@@ -188,6 +188,8 @@ export interface Coordinator {
   /** The parked node's next turn carries `text`, given by the person unless `by` says otherwise. */
   answerNode(id: string, text: string, by?: Answerer): boolean;
   answerRoot(id: string, text: string): boolean;
+  /** The person steered newer words into the running root `id`: work it hands out from now on quotes them. */
+  requote(id: string, request: string): boolean;
   /** Live nodes assigned to this bot that are parked on the person or on their requester. */
   parkedFor(botId: string): HandoffView[];
   parkedDirect(threadId: string): HandoffView | undefined;

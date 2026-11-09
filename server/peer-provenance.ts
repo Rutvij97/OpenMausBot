@@ -32,6 +32,14 @@ export function workOrigin(line: RequestLine | undefined): WorkOrigin {
   return request ? { kind: "user", request } : OUTSIDE;
 }
 
+/** The person's own line steered into their running turn becomes the request that turn's handoffs quote. Undefined leaves
+ * the origin as it is: a turn that was not the person's never gains their authority, and an app's line never replaces their words. */
+export function steeredWorkOrigin(current: WorkOrigin | undefined, line: RequestLine & Pick<Message, "fromApp">): WorkOrigin | undefined {
+  if (current?.kind !== "user" || line.fromApp) return undefined;
+  const next = workOrigin(line);
+  return next.kind === "user" ? { ...current, request: next.request } : undefined;
+}
+
 /** A routine's or webhook's run, or a Cloud guest's turn, is never the user's; a continuation passes no line, since a stored line cannot prove who wrote it. */
 export function requestWorkOrigin({ trigger, guest, handed, continued, line }: {
   trigger?: RoutineRunTrigger;

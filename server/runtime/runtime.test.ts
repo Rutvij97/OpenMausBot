@@ -1411,3 +1411,38 @@ describe("Runtime: at Full access a question is its requester's to answer, and o
     invariants(w);
   });
 });
+
+describe("Runtime: the person steers newer words into a running root", () => {
+  it("quotes them in work handed out afterwards, and leaves work already handed out as it was", async () => {
+    const w = world();
+    const root = w.runtime.begin(beginReq());
+    const before = ok(w.runtime.enqueue(toBot("builder", root.id)));
+    expect(w.runtime.requote(root.id, "Ship the PDF export instead")).toBe(true);
+    expect(w.store.get(root.id)?.origin).toEqual({ kind: "person", source: "chat", quote: "Ship the PDF export instead" });
+    const after = ok(w.runtime.enqueue(toBot("tester", root.id)));
+    expect(w.store.get(before.id)?.origin.quote).toBe("Ship the CSV export");
+    expect(w.store.get(after.id)?.origin.quote).toBe("Ship the PDF export instead");
+    w.runtime.tick();
+    const envelopes = w.runner.runs.map(run => [run.a.id, run.input.envelope] as const);
+    expect(envelopes.find(([id]) => id === after.id)?.[1]).toContain("Ship the PDF export instead");
+    expect(envelopes.find(([id]) => id === after.id)?.[1]).not.toContain("Ship the CSV export");
+    await flush();
+    invariants(w);
+  });
+
+  it("refuses a child, a root that is not running, and a root no person started", () => {
+    const w = world();
+    const root = w.runtime.begin(beginReq());
+    const child = ok(w.runtime.enqueue(toBot("builder", root.id)));
+    expect(w.runtime.requote(child.id, "Something else")).toBe(false);
+    expect(w.runtime.requote("missing", "Something else")).toBe(false);
+    expect(w.runtime.requote(root.id, "")).toBe(false);
+    const routine = w.runtime.begin(beginReq({ origin: { kind: "routine", source: "routine" } }));
+    expect(w.runtime.requote(routine.id, "Something else")).toBe(false);
+    expect(w.store.get(routine.id)?.origin).toEqual({ kind: "routine", source: "routine" });
+    w.runtime.end(root.id, { ok: true, text: "Handed to builder" });
+    expect(w.store.get(root.id)?.status).not.toBe("running");
+    expect(w.runtime.requote(root.id, "Something else")).toBe(false);
+    expect(w.store.get(root.id)?.origin.quote).toBe("Ship the CSV export");
+  });
+});

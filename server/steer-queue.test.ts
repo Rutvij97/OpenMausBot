@@ -200,6 +200,16 @@ describe("steer-queue module", () => {
     settleHeldSteeredQueue(held!);
   });
 
+  it("remembers through a restart which queued lines the person sent themselves", () => {
+    const botId = "bot-persons-own", threadId = "thread-persons-own";
+    const theirs = queueSteeredMessage(botId, threadId, "typed by the person", { personsOwn: true });
+    queueSteeredMessage(botId, threadId, "sent through the API", { personsOwn: false });
+    restoreSteeredMessages();
+    const held = holdSteeredQueue(botId, threadId, theirs.id);
+    expect(held?.items.map((item) => item.personsOwn)).toEqual([true, undefined]);
+    settleHeldSteeredQueue(held!);
+  });
+
   it("appends a drained message in the name of the person who queued it", () => {
     const bot = fakeBot("bot-sender-drain", "thread-sender-drain", true);
     const store = fakeStore([bot]);

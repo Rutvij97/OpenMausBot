@@ -144,6 +144,18 @@ export class Runtime {
     return root;
   }
 
+  /** The person's newer words in a running root's own turn: work it hands out from now on quotes them. False when `id` is
+   * not a running root that a person started. */
+  requote(id: string, quote: string): boolean {
+    const n = this.store.get(id);
+    if (!n || n.parentId !== undefined || n.status !== "running" || n.origin.kind !== "person" || !quote) return false;
+    if (n.origin.quote === quote) return true;
+    n.origin = { ...n.origin, quote };
+    this.store.update(n);
+    this.touch(n);
+    return true;
+  }
+
   /** Never throws: an unknown id, a child or a root that is not running is logged and left alone. */
   end(rootId: string, result: EndResult): void {
     const n = this.store.get(rootId);

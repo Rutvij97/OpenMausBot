@@ -388,6 +388,11 @@ export class RuntimeCoordinator implements Coordinator {
     return this.answerNode(id, text);
   }
 
+  requote(id: string, request: string): boolean {
+    this.ready();
+    return this.runtime.requote(id, request);
+  }
+
   parkedDirect(threadId: string): HandoffView | undefined {
     this.ready();
     const a = this.live().find(n => n.parentId === undefined && n.status === "needs_input" && this.direct(n, threadId));

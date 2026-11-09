@@ -44,6 +44,8 @@ interface QueueEntry {
     rowId?: string;
     /** Bot ids picked from the @ list. */
     mentions?: string[];
+    /** The server saw the person send it themselves; only such a line may become the request a running turn quotes. */
+    personsOwn?: true;
   }>;
 }
 
@@ -107,7 +109,7 @@ export function queueSteeredMessage(
   botId: string,
   threadId: string,
   text: string,
-  options: { prompt?: string; replyToId?: string; sendId?: string; dataContext?: Message["dataContext"]; reason?: SteerQueueReason; unattended?: boolean; peerAsk?: Message["peerAsk"]; origin?: WorkOrigin; sender?: ResolvedSender; trigger?: UsageTrigger; callId?: string; via?: "call"; reaction?: string; fromApp?: Message["fromApp"]; relay?: Message["relay"]; rowId?: string; first?: boolean; queuedAt?: number; mentions?: string[] } = {},
+  options: { prompt?: string; replyToId?: string; sendId?: string; dataContext?: Message["dataContext"]; reason?: SteerQueueReason; unattended?: boolean; peerAsk?: Message["peerAsk"]; origin?: WorkOrigin; sender?: ResolvedSender; trigger?: UsageTrigger; callId?: string; via?: "call"; reaction?: string; fromApp?: Message["fromApp"]; relay?: Message["relay"]; rowId?: string; first?: boolean; queuedAt?: number; mentions?: string[]; personsOwn?: boolean } = {},
 ): QueuedSteer {
   const id = newId();
   const entry = queues.get(threadId) ?? { botId, items: [] };
@@ -132,6 +134,7 @@ export function queueSteeredMessage(
     ...(options.relay ? { relay: options.relay } : {}),
     ...(options.rowId ? { rowId: options.rowId } : {}),
     ...(options.mentions?.length ? { mentions: options.mentions } : {}),
+    ...(options.personsOwn ? { personsOwn: true as const } : {}),
   };
   saveChatFollowup({ id, kind: "bot", ownerId: botId, threadId, payload: item });
   // `first`: ahead of everything queued but the person's own messages sent before it.

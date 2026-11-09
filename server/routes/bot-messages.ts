@@ -39,6 +39,7 @@ import { parseMentionPicks } from "../../shared/room-mentions.ts";
 import { pinnedClientThreadGuard } from "./pinned-client-thread.ts";
 import { refusalBody, userError } from "../user-errors.ts";
 import { PASS, type RouteHandler } from "./table.ts";
+import type { SteeredRequests } from "../host/steered-request.ts";
 
 type RunningInstance = ReturnType<ProviderRegistry["get"]>;
 
@@ -60,6 +61,8 @@ export interface BotMessageRouteDeps {
   noAiRefusal?(threadId: string, sender: ResolvedSender | undefined, instanceId?: string): Error | null;
   routines(): RoutineManager | null;
   handoffs: Pick<Handoffs, "current" | "steered">;
+  /** The person's line steered into the running turn: that turn's later handoffs quote it. */
+  steeredRequests?: Pick<SteeredRequests, "generation" | "requote">;
   /** The turn running in a thread now, as its runtime events name it. */
   liveTurn(threadId: string): string | undefined;
   phoneSecretSubmissions: Pick<PhoneSecretSubmissionRegistry, "hasThread">;
@@ -161,7 +164,7 @@ const guardedSendSchema = z.object({
 
 export function createBotMessageRoutes(deps: BotMessageRouteDeps): RouteHandler {
   const {
-    store, registry, handoffs, liveTurn, phoneSecretSubmissions, directTurnDispatchClaims, groupSpeakers,
+    store, registry, handoffs, steeredRequests, liveTurn, phoneSecretSubmissions, directTurnDispatchClaims, groupSpeakers,
     desktopManaged: DESKTOP_MANAGED, cloudHome: CLOUD_HOME, DirectSendRefused,
     acceptDirectSend, directSendRefusal, startTurn, usageTriggerFor, messageSender, cloudGuestSendRefusal, cloudThreadRefusal,
     cardAnswerRefusal, commandRememberRefusal, requestBehavior, requestedTaskBot, botForThread, threadBusy,
@@ -389,7 +392,7 @@ export function createBotMessageRoutes(deps: BotMessageRouteDeps): RouteHandler 
       }
       const prompt = (steerInput?.texts ?? held.items.map((item) => item.prompt)).join("\n\n");
       const images = steerInput?.images ?? [];
-      const steerTarget = handoffs.current(bot.threadId);
+      const steerTarget = handoffs.current(bot.threadId), steerGeneration = steeredRequests?.generation(bot.threadId);
       let steered: SteerOutcome = "refused";
       if (steerAdmission.action === "steer" && instance?.adapter.steer) {
         steered = await (images.length > 0
@@ -422,6 +425,8 @@ export function createBotMessageRoutes(deps: BotMessageRouteDeps): RouteHandler 
         }));
         const asked = messages.filter((_, index) => !held.items[index]?.unattended && !held.items[index]?.peerAsk).at(-1);
         if (asked) store.setTaskAskedAt(bot.id, bot.threadId, asked.at);
+        const personsOwn = messages.filter((_, index) => held.items[index]?.personsOwn).at(-1);
+        if (personsOwn) steeredRequests?.requote(bot.threadId, steerGeneration, personsOwn, true);
         for (const message of messages) handoffs.steered(bot.threadId, steerTarget, instance?.instanceId, message.id);
         const queueIds = held.items.map((item) => item.messageId);
         settleHeldSteeredQueue(held);
